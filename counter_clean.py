@@ -20,6 +20,8 @@ from PySide6.QtGui import QFont, QCursor, QKeyEvent, QIcon, QInputMethod
 # ============================================================================
 BUTTON_SIZE = 70          # 버튼 기본 크기 (정사각형)
 BUTTON_FONT_SIZE = 11     # 버튼 폰트 크기
+BUTTON_COUNT_FONT_SIZE = 16  # 버튼 카운트 폰트 크기
+BUTTON_COUNT_COLOR = "#4CAF50"  # 버튼 카운트 색상 (초록색)
 BUTTON_PADDING = 2        # 버튼 내부 여백
 GRID_SPACING = 4          # 그리드 간격
 PANEL_MARGIN = 4          # 패널 여백
@@ -84,7 +86,12 @@ class UserInputDialog(QDialog):
         name = self.name_input.text().strip()
         # 2-4글자 제한 검증
         if len(name) < 2 or len(name) > 4:
-            QMessageBox.warning(self, "입력 오류", "이름은 2-4글자로 입력해주세요.")
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Warning)
+            msg.setWindowTitle("입력 오류")
+            msg.setText("이름은 2-4글자로 입력해주세요.")
+            msg.setStyleSheet("")  # 시스템 기본 스타일 사용
+            msg.exec()
             return ""
         return name
 
@@ -210,6 +217,22 @@ class NumpadButton(QPushButton):
         self.shortcut_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         self.shortcut_label.setStyleSheet("background: transparent;")
 
+        # 이름 표시용 라벨 (중앙 상단)
+        self.name_label = QLabel(self)
+        self.name_label.setGeometry(0, 20, BUTTON_SIZE, 14)
+        self.name_label.setFont(QFont("맑은 고딕", BUTTON_FONT_SIZE, QFont.Bold))
+        self.name_label.setAlignment(Qt.AlignCenter)
+        self.name_label.setStyleSheet("background: transparent; color: #e0e0e0;")
+        self.name_label.hide()
+
+        # 카운트 표시용 라벨 (중앙 하단)
+        self.count_label = QLabel(self)
+        self.count_label.setGeometry(0, 40, BUTTON_SIZE, 20)
+        self.count_label.setFont(QFont("맑은 고딕", BUTTON_COUNT_FONT_SIZE, QFont.Bold))
+        self.count_label.setAlignment(Qt.AlignCenter)
+        self.count_label.setStyleSheet(f"background: transparent; color: {BUTTON_COUNT_COLOR};")
+        self.count_label.hide()
+
         self.apply_default_style()
 
     def apply_default_style(self):
@@ -218,7 +241,7 @@ class NumpadButton(QPushButton):
             QPushButton {{
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                             stop:0 #4a4e69, stop:0.5 #3c4254, stop:1 #2f3542);
-                color: #e0e0e0;
+                color: transparent;
                 border: 2px solid #3c4254;
                 border-radius: 12px;
                 padding: {BUTTON_PADDING}px;
@@ -265,9 +288,15 @@ class NumpadButton(QPushButton):
     def update_display(self):
         """버튼 텍스트 업데이트 (단축키 표시 포함)"""
         if self.user_name:
-            # 이름과 카운트만 표시 (활성화 상태)
-            self.setText(f"{self.user_name}\n({self.count})")
+            # 버튼 텍스트는 비움 (라벨로 표시)
+            self.setText("")
             self.apply_default_style()
+            # 이름 라벨 표시
+            self.name_label.setText(self.user_name)
+            self.name_label.show()
+            # 카운트 라벨 표시
+            self.count_label.setText(str(self.count))
+            self.count_label.show()
             # 단축키 라벨 (활성)
             if self.shortcut_key:
                 self.shortcut_label.setText(f"[{self.shortcut_key}]")
@@ -277,6 +306,8 @@ class NumpadButton(QPushButton):
         else:
             # 빈 키 표시 (비활성화 느낌)
             self.setText(f"{self.key_label}\n[빈 키]")
+            self.name_label.hide()
+            self.count_label.hide()
             # 비활성화 스타일 적용
             self.setStyleSheet(f"""
                 QPushButton {{
@@ -805,7 +836,12 @@ class CounterApp(QMainWindow):
 
         # 실시간 로그에 정보가 있을 경우에만 복사
         if not user_counts:
-            QMessageBox.information(self, "복사 실패", "카운트가 없습니다.", QMessageBox.Ok)
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Information)
+            msg.setWindowTitle("복사 실패")
+            msg.setText("카운트가 없습니다.")
+            msg.setStyleSheet("")  # 시스템 기본 스타일 사용
+            msg.exec()
             return
 
         summary_lines = []
@@ -819,7 +855,12 @@ class CounterApp(QMainWindow):
         QApplication.clipboard().setText(text)
 
         # 간단한 피드백 메시지
-        QMessageBox.information(self, "복사 완료", "카운터 결과가 클립보드에 복사되었습니다.", QMessageBox.Ok)
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Information)
+        msg.setWindowTitle("복사 완료")
+        msg.setText("카운터 결과가 클립보드에 복사되었습니다.")
+        msg.setStyleSheet("")  # 시스템 기본 스타일 사용
+        msg.exec()
 
     def apply_global_styles(self):
         self.setStyleSheet("""
@@ -909,7 +950,12 @@ class CounterApp(QMainWindow):
             if name:
                 # 중복 이름 체크
                 if self.is_duplicate_name(name, button):
-                    QMessageBox.warning(self, "중복 오류", f"'{name}'은(는) 이미 다른 키에 등록되어 있습니다.")
+                    msg = QMessageBox(self)
+                    msg.setIcon(QMessageBox.Warning)
+                    msg.setWindowTitle("중복 오류")
+                    msg.setText(f"'{name}'은(는) 이미 다른 키에 등록되어 있습니다.")
+                    msg.setStyleSheet("")
+                    msg.exec()
                     return
 
                 button.set_user(name)
@@ -948,7 +994,12 @@ class CounterApp(QMainWindow):
             if new_name:
                 # 중복 이름 체크 (자신 제외)
                 if self.is_duplicate_name(new_name, button):
-                    QMessageBox.warning(self, "중복 오류", f"'{new_name}'은(는) 이미 다른 키에 등록되어 있습니다.")
+                    msg = QMessageBox(self)
+                    msg.setIcon(QMessageBox.Warning)
+                    msg.setWindowTitle("중복 오류")
+                    msg.setText(f"'{new_name}'은(는) 이미 다른 키에 등록되어 있습니다.")
+                    msg.setStyleSheet("")
+                    msg.exec()
                     return
 
                 old_name = button.user_name
@@ -962,12 +1013,14 @@ class CounterApp(QMainWindow):
 
     def delete_user(self, button):
         """사용자 삭제"""
-        reply = QMessageBox.question(
-            self, '확인',
-            f"'{button.user_name}'을(를) 삭제하시겠습니까?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Question)
+        msg.setWindowTitle("확인")
+        msg.setText(f"'{button.user_name}'을(를) 삭제하시겠습니까?")
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setDefaultButton(QMessageBox.No)
+        msg.setStyleSheet("")
+        reply = msg.exec()
 
         if reply == QMessageBox.Yes:
             old_name = button.user_name
@@ -1065,12 +1118,14 @@ class CounterApp(QMainWindow):
     # ========================================================================
 
     def reset_today_counters(self):
-        reply = QMessageBox.question(
-            self, '확인',
-            "오늘의 모든 카운터를 초기화하시겠습니까?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Question)
+        msg.setWindowTitle("확인")
+        msg.setText("오늘의 모든 카운터를 초기화하시겠습니까?")
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setDefaultButton(QMessageBox.No)
+        msg.setStyleSheet("")  # 시스템 기본 스타일 사용
+        reply = msg.exec()
 
         if reply == QMessageBox.Yes:
             # 버튼 카운트 리셋
@@ -1120,7 +1175,12 @@ class CounterApp(QMainWindow):
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write("\n".join(summary_lines))
 
-            QMessageBox.information(self, "저장 완료", f"파일이 저장되었습니다:\n{filename}")
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Information)
+            msg.setWindowTitle("저장 완료")
+            msg.setText(f"파일이 저장되었습니다:\n{filename}")
+            msg.setStyleSheet("")  # 시스템 기본 스타일 사용
+            msg.exec()
 
     # ========================================================================
     # DATA PERSISTENCE
@@ -1260,12 +1320,22 @@ def main():
             current_window.raise_()
             current_window.activateWindow()
         else:
-            QMessageBox.warning(None, "이미 실행 중", "Numpad Counter가 이미 실행 중입니다.")
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Warning)
+            msg.setWindowTitle("이미 실행 중")
+            msg.setText("Numpad Counter가 이미 실행 중입니다.")
+            msg.setStyleSheet("")  # 시스템 기본 스타일 사용
+            msg.exec()
         return
 
     # 새 인스턴스 생성
     if not shared_memory.create(1):
-        QMessageBox.warning(None, "오류", "프로그램을 시작할 수 없습니다.")
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Warning)
+        msg.setWindowTitle("오류")
+        msg.setText("프로그램을 시작할 수 없습니다.")
+        msg.setStyleSheet("")  # 시스템 기본 스타일 사용
+        msg.exec()
         return
 
     # 창 생성
