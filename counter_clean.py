@@ -991,17 +991,18 @@ class CounterApp(QMainWindow):
 
     def update_history_table(self):
         """히스토리 테이블 업데이트 (매트릭스 형태)"""
-        if not self.click_history:
-            self.history_table.setRowCount(0)
-            self.history_table.setColumnCount(0)
-            return
-
         # 등록된 사용자 목록 가져오기 (등록 순서대로)
         users_with_order = []
         for key, btn in self.numpad.buttons.items():
             if btn.user_name:
                 order = btn.register_order if hasattr(btn, 'register_order') else 0
                 users_with_order.append((btn.user_name, order))
+
+        # 등록된 사용자가 없으면 테이블 초기화
+        if not users_with_order:
+            self.history_table.setRowCount(0)
+            self.history_table.setColumnCount(0)
+            return
 
         # 등록 순서로 정렬하고 중복 제거
         users_with_order.sort(key=lambda x: x[1])
@@ -1237,6 +1238,7 @@ class CounterApp(QMainWindow):
                 self.add_log(f"[등록] {button.key_label}: '{name}' 등록됨")
                 self.save_data()
                 self.update_summary()
+                self.update_history_table()
 
     def is_duplicate_name(self, name, current_button):
         """다른 버튼에 같은 이름이 있는지 확인"""
