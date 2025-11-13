@@ -996,17 +996,29 @@ class CounterApp(QMainWindow):
             self.history_table.setColumnCount(0)
             return
 
-        # 등록된 사용자 목록 가져오기 (현재 프리셋)
+        # 등록된 사용자 목록 가져오기 (등록 순서대로)
+        users_with_order = []
+        for key, btn in self.numpad.buttons.items():
+            if btn.user_name:
+                order = btn.register_order if hasattr(btn, 'register_order') else 0
+                users_with_order.append((btn.user_name, order))
+
+        # 등록 순서로 정렬하고 중복 제거
+        users_with_order.sort(key=lambda x: x[1])
         user_names = []
-        for key in sorted(self.presets[self.current_preset]["users"].keys()):
-            name = self.presets[self.current_preset]["users"][key]["name"]
-            if name and name not in user_names:
+        for name, _ in users_with_order:
+            if name not in user_names:
                 user_names.append(name)
 
         # 컬럼 설정: 각 사용자 이름만
         headers = user_names
         self.history_table.setColumnCount(len(headers))
         self.history_table.setHorizontalHeaderLabels(headers)
+
+        # 컬럼 드래그로 순서 변경 가능하도록 설정
+        self.history_table.horizontalHeader().setSectionsMovable(True)
+        self.history_table.horizontalHeader().setDragEnabled(True)
+        self.history_table.horizontalHeader().setDragDropMode(QHeaderView.InternalMove)
 
         # 각 사용자의 최대 클릭 횟수 계산
         max_count = {}
@@ -1215,6 +1227,13 @@ class CounterApp(QMainWindow):
                     return
 
                 button.set_user(name)
+                # 등록 순서 부여 (현재 프리셋에서 가장 큰 order + 1)
+                max_order = 0
+                for btn in self.numpad.buttons.values():
+                    if hasattr(btn, 'register_order') and btn != button:
+                        max_order = max(max_order, btn.register_order)
+                button.register_order = max_order + 1
+
                 self.add_log(f"[등록] {button.key_label}: '{name}' 등록됨")
                 self.save_data()
                 self.update_summary()
@@ -1313,7 +1332,8 @@ class CounterApp(QMainWindow):
             if btn.user_name:
                 preset_data[key] = {
                     "name": btn.user_name,
-                    "count": btn.count
+                    "count": btn.count,
+                    "order": btn.register_order if hasattr(btn, 'register_order') else 0
                 }
         self.presets[self.current_preset]["users"] = preset_data
         self.presets[self.current_preset]["click_history"] = self.click_history
@@ -1333,6 +1353,7 @@ class CounterApp(QMainWindow):
                 btn = self.numpad.buttons[key]
                 btn.set_user(data["name"])
                 btn.count = data.get("count", 0)
+                btn.register_order = data.get("order", 0)
                 btn.update_display()
 
         # 클릭 히스토리 복원
