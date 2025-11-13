@@ -79,8 +79,39 @@ class UserInputDialog(QDialog):
         self.setWindowTitle(title)
         self.setModal(True)
         self.setFixedSize(300, 140)
-        # 시스템 기본 스타일 사용 (다크모드 스타일 상속 방지)
-        self.setStyleSheet("")
+        # 다크 테마 스타일 적용
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #2a2a3e;
+            }
+            QLabel {
+                color: #e0e0e0;
+            }
+            QLineEdit {
+                background-color: #3c4254;
+                color: #e0e0e0;
+                border: 1px solid #4a4e69;
+                padding: 5px;
+                border-radius: 3px;
+            }
+            QLineEdit:focus {
+                border: 1px solid #5294e2;
+            }
+            QPushButton {
+                background-color: #3c4254;
+                color: #e0e0e0;
+                border: 1px solid #4a4e69;
+                padding: 5px 15px;
+                border-radius: 3px;
+                min-width: 60px;
+            }
+            QPushButton:hover {
+                background-color: #4a4e69;
+            }
+            QPushButton:pressed {
+                background-color: #5294e2;
+            }
+        """)
 
         layout = QVBoxLayout()
         label = QLabel("사용자 이름 (한글 2-4글자):")
@@ -100,18 +131,19 @@ class UserInputDialog(QDialog):
 
         # 안내 메시지
         hint_label = QLabel("※ 대부분 3글자로 입력합니다")
-        hint_label.setStyleSheet("font-size: 9pt;")  # 시스템 기본 색상 사용
+        hint_label.setStyleSheet("font-size: 9pt; color: #b0b0b0;")
         layout.addWidget(hint_label)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
+        buttons.accepted.connect(self.validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
         self.setLayout(layout)
         self.name_input.setFocus()
 
-    def get_name(self):
+    def validate_and_accept(self):
+        """OK 버튼 클릭 시 검증"""
         name = self.name_input.text().strip()
         # 2-4글자 제한 검증
         if len(name) < 2 or len(name) > 4:
@@ -121,8 +153,14 @@ class UserInputDialog(QDialog):
             msg.setText("이름은 2-4글자로 입력해주세요.")
             msg.setStyleSheet(MESSAGEBOX_DARK_STYLE)
             msg.exec()
-            return ""
-        return name
+            # 다이얼로그를 닫지 않고 계속 입력받음
+            return
+        # 검증 통과하면 다이얼로그 닫기
+        self.accept()
+
+    def get_name(self):
+        """검증된 이름 반환"""
+        return self.name_input.text().strip()
 
 
 class DailyLogDialog(QDialog):
