@@ -10,15 +10,16 @@ from datetime import datetime
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QHBoxLayout, QGridLayout, QPushButton, QLabel,
                                QTextEdit, QFrame, QMenu, QDialog,
-                               QLineEdit, QDialogButtonBox, QMessageBox, QFileDialog)
+                               QLineEdit, QDialogButtonBox, QMessageBox, QFileDialog,
+                               QTableWidget, QTableWidgetItem, QHeaderView)
 from PySide6.QtCore import Qt, QTimer, QSharedMemory
-from PySide6.QtGui import QFont, QCursor, QKeyEvent, QIcon, QInputMethod
+from PySide6.QtGui import QFont, QCursor, QKeyEvent, QIcon, QInputMethod, QColor
 
 
 # ============================================================================
 # UI SIZE CONFIGURATION (전역 변수로 쉽게 조정 가능)
 # ============================================================================
-BUTTON_SIZE = 70          # 버튼 기본 크기 (정사각형)
+BUTTON_SIZE = 80          # 버튼 기본 크기 (정사각형) - 70 + 10%
 BUTTON_FONT_SIZE = 11     # 버튼 폰트 크기
 BUTTON_COUNT_FONT_SIZE = 16  # 버튼 카운트 폰트 크기
 BUTTON_COUNT_COLOR = "#4CAF50"  # 버튼 카운트 색상 (초록색)
@@ -30,8 +31,10 @@ PRESET_BUTTON_SIZE = 30   # 프리셋 버튼 크기
 LOG_FONT_SIZE = 8         # 실시간 로그 폰트 크기
 TOTAL_COUNT_FONT_SIZE = 14  # 총 카운트 폰트 크기
 TOTAL_COUNT_COLOR = "#e0e0e0"  # 총 카운트 텍스트 색상
-WINDOW_WIDTH = 380        # 창 너비
-WINDOW_HEIGHT = 530       # 창 높이
+WINDOW_WIDTH = 440        # 창 너비 (기본)
+WINDOW_WIDTH_EXPANDED = 1186  # 창 너비 (히스토리 패널 펼침)
+WINDOW_HEIGHT = 580       # 창 높이
+HISTORY_PANEL_WIDTH = 780  # 히스토리 패널 너비
 
 # 프리셋 버튼 색상
 PRESET_COLORS = [
@@ -39,6 +42,30 @@ PRESET_COLORS = [
     "#3498db",  # 파랑
     "#2ecc71",  # 초록
 ]
+
+# 히스토리 테이블 하이라이트 색상
+HISTORY_HIGHLIGHT_LATEST = "#2ecc71"   # 최신 클릭 (초록색)
+
+# QMessageBox 다크 테마 스타일
+MESSAGEBOX_DARK_STYLE = """
+    QMessageBox {
+        background-color: #2a2a3e;
+        color: #e0e0e0;
+    }
+    QMessageBox QLabel {
+        color: #e0e0e0;
+    }
+    QPushButton {
+        background-color: #3c4254;
+        color: #e0e0e0;
+        border: 1px solid #4a4e69;
+        padding: 5px 15px;
+        min-width: 60px;
+    }
+    QPushButton:hover {
+        background-color: #4a4e69;
+    }
+"""
 
 
 # ============================================================================
@@ -52,6 +79,8 @@ class UserInputDialog(QDialog):
         self.setWindowTitle(title)
         self.setModal(True)
         self.setFixedSize(300, 140)
+        # 시스템 기본 스타일 사용 (다크모드 스타일 상속 방지)
+        self.setStyleSheet("")
 
         layout = QVBoxLayout()
         label = QLabel("사용자 이름 (한글 2-4글자):")
@@ -71,7 +100,7 @@ class UserInputDialog(QDialog):
 
         # 안내 메시지
         hint_label = QLabel("※ 대부분 3글자로 입력합니다")
-        hint_label.setStyleSheet("color: #888888; font-size: 9pt;")
+        hint_label.setStyleSheet("font-size: 9pt;")  # 시스템 기본 색상 사용
         layout.addWidget(hint_label)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -90,7 +119,7 @@ class UserInputDialog(QDialog):
             msg.setIcon(QMessageBox.Warning)
             msg.setWindowTitle("입력 오류")
             msg.setText("이름은 2-4글자로 입력해주세요.")
-            msg.setStyleSheet("")  # 시스템 기본 스타일 사용
+            msg.setStyleSheet(MESSAGEBOX_DARK_STYLE)
             msg.exec()
             return ""
         return name
@@ -104,12 +133,14 @@ class DailyLogDialog(QDialog):
         self.setModal(True)
         self.setFixedSize(400, 540)
         self.data_dir = data_dir
+        # 시스템 기본 스타일 사용 (다크모드 스타일 상속 방지)
+        self.setStyleSheet("")
 
         layout = QVBoxLayout()
 
         # 상단: 안내 메시지
         info_label = QLabel("※ 최근 90일치 로그가 자동으로 보관됩니다")
-        info_label.setStyleSheet("color: #888888; font-size: 9pt; padding: 5px;")
+        info_label.setStyleSheet("font-size: 9pt; padding: 5px;")  # 시스템 기본 색상 사용
         layout.addWidget(info_label)
 
         # 중간: 로그 목록 (날짜 + 요약 + 삭제 버튼)
@@ -233,6 +264,14 @@ class NumpadButton(QPushButton):
         self.count_label.setStyleSheet(f"background: transparent; color: {BUTTON_COUNT_COLOR};")
         self.count_label.hide()
 
+        # 순번 표시용 라벨 (우측 상단 - 단축키 반대편)
+        self.order_label = QLabel(self)
+        self.order_label.setGeometry(BUTTON_SIZE - 25, 3, 22, 15)
+        self.order_label.setFont(QFont("맑은 고딕", 8, QFont.Bold))
+        self.order_label.setAlignment(Qt.AlignCenter)
+        self.order_label.setStyleSheet("background: rgba(255, 165, 0, 180); color: white; border-radius: 3px; padding: 1px;")
+        self.order_label.hide()
+
         self.apply_default_style()
 
     def apply_default_style(self):
@@ -285,6 +324,14 @@ class NumpadButton(QPushButton):
         self.count = 0
         self.update_display()
 
+    def set_order(self, order_num):
+        """순번 설정"""
+        if order_num > 0:
+            self.order_label.setText(str(order_num))
+            self.order_label.show()
+        else:
+            self.order_label.hide()
+
     def update_display(self):
         """버튼 텍스트 업데이트 (단축키 표시 포함)"""
         if self.user_name:
@@ -336,15 +383,12 @@ class NumpadButton(QPushButton):
 # MODE TOGGLE BUTTON (+ / - 모드) - 원래 [-] 위치에 배치
 # ============================================================================
 
-class ModeToggleButton(QPushButton):
-    """모드 토글 버튼 - 증가/감소 모드 토글 (단축키: -)"""
+class UndoButton(QPushButton):
+    """취소 버튼 - 최근 클릭 되돌리기 (단축키: -)"""
     def __init__(self, parent=None):
-        super().__init__("-", parent)
-        self.is_increment_mode = True  # True = +증가, False = -감소
+        super().__init__("↶\n취소", parent)
         self.setFixedSize(BUTTON_SIZE, BUTTON_SIZE)
         self.setFont(QFont("맑은 고딕", BUTTON_FONT_SIZE, QFont.Bold))
-        self.setCheckable(True)
-        self.setChecked(True)
 
         # 단축키 표시용 라벨 (좌측 상단)
         self.shortcut_label = QLabel(self)
@@ -354,53 +398,25 @@ class ModeToggleButton(QPushButton):
         self.shortcut_label.setText("[-]")
         self.shortcut_label.setStyleSheet("background: transparent; color: #ffffff;")
 
-        self.clicked.connect(self.toggle_mode)
         self.update_display()
-
-    def toggle_mode(self):
-        """모드 토글"""
-        self.is_increment_mode = not self.is_increment_mode
-        self.update_display()
-        # 부모(CounterApp)에게 모드 변경 알림
-        if hasattr(self.parent().parent(), 'on_mode_changed'):
-            self.parent().parent().on_mode_changed()
 
     def update_display(self):
         """디스플레이 업데이트"""
-        if self.is_increment_mode:
-            self.setText("+\n증가")
-            self.setStyleSheet(f"""
-                QPushButton {{
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #4a9e69, stop:0.5 #3c8254, stop:1 #2f7542);
-                    color: white;
-                    border: 2px solid #4a9e69;
-                    border-radius: 12px;
-                    padding: {BUTTON_PADDING}px;
-                }}
-                QPushButton:hover {{
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #5abe79, stop:0.5 #4c9264, stop:1 #3f8552);
-                    border: 2px solid #5abe79;
-                }}
-            """)
-        else:
-            self.setText("-\n감소")
-            self.setStyleSheet(f"""
-                QPushButton {{
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #9e4a4a, stop:0.5 #823c3c, stop:1 #752f2f);
-                    color: white;
-                    border: 2px solid #9e4a4a;
-                    border-radius: 12px;
-                    padding: {BUTTON_PADDING}px;
-                }}
-                QPushButton:hover {{
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #be5a5a, stop:0.5 #924c4c, stop:1 #853f3f);
-                    border: 2px solid #be5a5a;
-                }}
-            """)
+        self.setStyleSheet(f"""
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                            stop:0 #9e4a4a, stop:0.5 #823c3c, stop:1 #752f2f);
+                color: white;
+                border: 2px solid #9e4a4a;
+                border-radius: 12px;
+                padding: {BUTTON_PADDING}px;
+            }}
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                            stop:0 #be5a5a, stop:0.5 #924c4c, stop:1 #853f3f);
+                border: 2px solid #be5a5a;
+            }}
+        """)
 
 
 # ============================================================================
@@ -465,7 +481,7 @@ class NumpadGrid(QWidget):
         super().__init__(parent)
         self.buttons = {}
         self.reset_btn = None  # Reset 버튼 (원래 Num 위치)
-        self.mode_toggle_btn = None  # 모드 토글 버튼 (원래 - 위치)
+        self.undo_btn = None  # 취소 버튼 (원래 - 위치)
         self.summary_label = None
         self.init_ui()
 
@@ -508,9 +524,9 @@ class NumpadGrid(QWidget):
         self.buttons['0'] = btn_0
         grid.addWidget(btn_0, 4, 0, 1, 2)
 
-        # 모드 토글 버튼 (우측 상단, 단축키: -, 원래 - 위치)
-        self.mode_toggle_btn = ModeToggleButton(self)
-        grid.addWidget(self.mode_toggle_btn, 0, 3, 1, 1)
+        # 취소 버튼 (우측 상단, 단축키: -, 원래 - 위치)
+        self.undo_btn = UndoButton(self)
+        grid.addWidget(self.undo_btn, 0, 3, 1, 1)
 
         # + 버튼 추가 예정 (향후 추가)
 
@@ -585,8 +601,8 @@ class CounterApp(QMainWindow):
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
-        # 창 크기 고정
-        self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+        # 창 크기 고정 (기본값은 펼침 상태)
+        self.setFixedSize(WINDOW_WIDTH_EXPANDED, WINDOW_HEIGHT)
 
         # Data setup (루트 디렉토리 사용)
         self.data_dir = "counter_data"
@@ -597,9 +613,10 @@ class CounterApp(QMainWindow):
         self.counter_data_file = os.path.join(self.data_dir, "counter_data.json")
 
         # State
-        self.presets = [{"name": f"프리셋 {i+1}", "users": {}} for i in range(3)]
+        self.presets = [{"name": f"프리셋 {i+1}", "users": {}, "click_history": []} for i in range(3)]
         self.current_preset = 0
         self.logs = []
+        self.click_history = []  # 클릭 순서 기록 [(name, count), ...]
         self.last_date = datetime.now().strftime("%Y-%m-%d")
 
         # UI Setup
@@ -609,6 +626,10 @@ class CounterApp(QMainWindow):
         # Load data and start timer
         self.load_data()
         # update_summary()는 load_current_preset()에서 호출됨
+
+        # 히스토리 테이블 초기 로드 (히스토리 패널이 펼쳐진 상태이므로)
+        if self.history_panel_visible and self.click_history:
+            self.update_history_table()
 
         # Daily reset timer
         self.check_timer = QTimer()
@@ -668,18 +689,44 @@ class CounterApp(QMainWindow):
         except:
             pass
 
-    def on_mode_changed(self):
-        """모드 토글 버튼 상태 변경 시 호출"""
-        # 현재는 별도 처리 없음 (필요시 추가)
-        pass
+    def undo_last_click(self):
+        """최근 클릭 취소 (Ctrl+Z 효과)"""
+        if not self.click_history:
+            self.add_log("[취소] 되돌릴 작업이 없습니다")
+            return
+
+        # 마지막 클릭 가져오기
+        last_name, last_count = self.click_history.pop()
+
+        # 해당 사용자의 버튼 찾기
+        target_button = None
+        for btn in self.numpad.buttons.values():
+            if btn.user_name == last_name and btn.count == last_count:
+                target_button = btn
+                break
+
+        if target_button:
+            # 카운트 감소
+            target_button.count -= 1
+            target_button.update_display()
+            self.add_log(f"[취소] {target_button.key_label}: {last_name} (총 {target_button.count}회)")
+
+            # 저장 및 업데이트
+            self.save_data()
+            self.save_daily_history()
+            self.update_summary()
+
+            # 히스토리 패널이 열려있으면 업데이트
+            if self.history_panel_visible:
+                self.update_history_table()
 
     def keyPressEvent(self, event):
         """키보드 입력 처리"""
         key_text = event.text()
 
-        # - 키 처리 (모드 토글)
+        # - 키 처리 (취소 버튼)
         if key_text == '-':
-            self.numpad.mode_toggle_btn.click()
+            self.undo_last_click()
             return
 
         # 숫자 및 기호 키 매핑
@@ -704,12 +751,16 @@ class CounterApp(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        main_layout = QVBoxLayout()
+        # 메인 레이아웃 (수평)
+        main_layout = QHBoxLayout()
         central_widget.setLayout(main_layout)
+
+        # 좌측: 넘패드 + 버튼들
+        left_layout = QVBoxLayout()
 
         # Numpad panel
         numpad_panel = self.create_numpad_panel()
-        main_layout.addWidget(numpad_panel, alignment=Qt.AlignCenter)
+        left_layout.addWidget(numpad_panel, alignment=Qt.AlignCenter)
 
         # Bottom buttons
         bottom_layout = QHBoxLayout()
@@ -717,17 +768,32 @@ class CounterApp(QMainWindow):
 
         self.export_txt_btn = QPushButton("TXT 저장")
         self.export_txt_btn.setFont(QFont("맑은 고딕", 10))
-        self.export_txt_btn.setFixedWidth(150)
+        self.export_txt_btn.setFixedWidth(100)
         self.export_txt_btn.clicked.connect(self.export_to_txt)
         bottom_layout.addWidget(self.export_txt_btn)
 
         self.show_log_btn = QPushButton("자세히")
         self.show_log_btn.setFont(QFont("맑은 고딕", 10))
-        self.show_log_btn.setFixedWidth(150)
+        self.show_log_btn.setFixedWidth(80)
         self.show_log_btn.clicked.connect(self.show_log_dialog)
         bottom_layout.addWidget(self.show_log_btn)
 
-        main_layout.addLayout(bottom_layout)
+        self.toggle_history_btn = QPushButton("◀ 닫힘")
+        self.toggle_history_btn.setFont(QFont("맑은 고딕", 10))
+        self.toggle_history_btn.setFixedWidth(100)
+        self.toggle_history_btn.clicked.connect(self.toggle_history_panel)
+        bottom_layout.addWidget(self.toggle_history_btn)
+
+        left_layout.addLayout(bottom_layout)
+
+        main_layout.addLayout(left_layout)
+
+        # 우측: 히스토리 패널 (기본값은 펼침)
+        self.history_panel = self.create_history_panel()
+        self.history_panel.show()
+        main_layout.addWidget(self.history_panel)
+
+        self.history_panel_visible = True
 
     def create_numpad_panel(self):
         """좌측 넘패드 패널"""
@@ -788,6 +854,9 @@ class CounterApp(QMainWindow):
                 lambda pos, b=btn: self.show_button_menu(b, pos)
             )
 
+        # Connect undo button
+        self.numpad.undo_btn.clicked.connect(self.undo_last_click)
+
         layout.addStretch()
         panel.setLayout(layout)
 
@@ -818,6 +887,151 @@ class CounterApp(QMainWindow):
 
         return panel
 
+    def create_history_panel(self):
+        """우측 히스토리 패널"""
+        panel = QFrame()
+        panel.setObjectName("historyPanel")
+        panel.setFixedWidth(HISTORY_PANEL_WIDTH)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # 테이블 (동적 컬럼)
+        self.history_table = QTableWidget()
+        self.history_table.setFont(QFont("맑은 고딕", 9))
+
+        # 행 번호(vertical header) 가운데 정렬
+        self.history_table.verticalHeader().setDefaultAlignment(Qt.AlignCenter)
+
+        # 스타일
+        self.history_table.setStyleSheet("""
+            QTableWidget {
+                background-color: #2a2a3e;
+                color: #e0e0e0;
+                gridline-color: #3c4254;
+                border: 1px solid #3c4254;
+            }
+            QHeaderView::section {
+                background-color: #3c4254;
+                color: #e0e0e0;
+                padding: 5px;
+                border: 1px solid #2a2a3e;
+                font-weight: bold;
+            }
+            QTableWidget::item {
+                padding: 5px;
+            }
+        """)
+
+        layout.addWidget(self.history_table)
+
+        panel.setLayout(layout)
+        panel.setStyleSheet("""
+            QFrame#historyPanel {
+                background-color: #2a2a3e;
+                border-left: 2px solid #3c4254;
+            }
+        """)
+
+        return panel
+
+    def toggle_history_panel(self):
+        """히스토리 패널 토글"""
+        if self.history_panel_visible:
+            # 닫기
+            self.history_panel.hide()
+            self.toggle_history_btn.setText("펼침 ▶")
+            self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+            self.history_panel_visible = False
+        else:
+            # 열기
+            self.history_panel.show()
+            self.toggle_history_btn.setText("◀ 닫힘")
+            self.setFixedSize(WINDOW_WIDTH_EXPANDED, WINDOW_HEIGHT)
+            self.history_panel_visible = True
+            self.update_history_table()
+
+    def update_history_table(self):
+        """히스토리 테이블 업데이트 (매트릭스 형태)"""
+        if not self.click_history:
+            self.history_table.setRowCount(0)
+            self.history_table.setColumnCount(0)
+            return
+
+        # 등록된 사용자 목록 가져오기 (현재 프리셋)
+        user_names = []
+        for key in sorted(self.presets[self.current_preset]["users"].keys()):
+            name = self.presets[self.current_preset]["users"][key]["name"]
+            if name and name not in user_names:
+                user_names.append(name)
+
+        # 컬럼 설정: 각 사용자 이름만
+        headers = user_names
+        self.history_table.setColumnCount(len(headers))
+        self.history_table.setHorizontalHeaderLabels(headers)
+
+        # 각 사용자의 최대 클릭 횟수 계산
+        max_count = {}
+        for name, count in self.click_history:
+            if name not in max_count or count > max_count[name]:
+                max_count[name] = count
+
+        # 행 개수 = 최대 카운트
+        max_rows = max(max_count.values()) if max_count else 0
+        self.history_table.setRowCount(max_rows)
+
+        # 각 사용자별 클릭을 개인 카운트 -> 전체 순번 매핑
+        user_clicks = {}  # {name: {personal_count: global_order}}
+        for global_order, (name, personal_count) in enumerate(self.click_history, 1):
+            if name not in user_clicks:
+                user_clicks[name] = {}
+            user_clicks[name][personal_count] = global_order
+
+        # 가장 최근 클릭 찾기 (마지막 항목만)
+        last_click = None
+        if self.click_history:
+            last_name, last_count = self.click_history[-1]
+            last_click = (last_name, last_count)
+
+        # 테이블 채우기
+        for row in range(max_rows):
+            personal_count = row + 1  # 개인 카운트 (1, 2, 3...)
+
+            # 각 사용자 컬럼
+            for col, user_name in enumerate(user_names):
+                if user_name in user_clicks and personal_count in user_clicks[user_name]:
+                    # 이 사용자의 personal_count번째 클릭의 전체 순번
+                    global_order = user_clicks[user_name][personal_count]
+                    item = QTableWidgetItem(str(global_order))
+                    item.setTextAlignment(Qt.AlignCenter)
+
+                    # 가장 최근 클릭인 경우 하이라이트
+                    if last_click and user_name == last_click[0] and personal_count == last_click[1]:
+                        # 볼드 폰트 적용
+                        font = item.font()
+                        font.setBold(True)
+                        item.setFont(font)
+                        # 배경색 적용
+                        item.setBackground(QColor(HISTORY_HIGHLIGHT_LATEST))
+                        # 텍스트 색상 (흰색)
+                        item.setForeground(QColor("#ffffff"))
+
+                    self.history_table.setItem(row, col, item)
+                else:
+                    # 빈 셀
+                    item = QTableWidgetItem("")
+                    item.setTextAlignment(Qt.AlignCenter)
+                    self.history_table.setItem(row, col, item)
+
+        # 컬럼 너비 자동 조정 (모든 컬럼 균등 분배)
+        header = self.history_table.horizontalHeader()
+        for col in range(len(headers)):
+            header.setSectionResizeMode(col, QHeaderView.Stretch)
+
+        # 스크롤을 맨 아래로
+        if max_rows > 0:
+            self.history_table.scrollToBottom()
+
     def show_log_dialog(self):
         """일자별 로그 팝업 표시"""
         dialog = DailyLogDialog(self.data_dir, self)
@@ -840,7 +1054,7 @@ class CounterApp(QMainWindow):
             msg.setIcon(QMessageBox.Information)
             msg.setWindowTitle("복사 실패")
             msg.setText("카운트가 없습니다.")
-            msg.setStyleSheet("")  # 시스템 기본 스타일 사용
+            msg.setStyleSheet(MESSAGEBOX_DARK_STYLE)
             msg.exec()
             return
 
@@ -851,6 +1065,11 @@ class CounterApp(QMainWindow):
         for name, count in user_counts:
             summary_lines.append(f"{name}: {count}회")
 
+        # 총합 계산 및 추가
+        total = sum(count for name, count in user_counts)
+        summary_lines.append("")
+        summary_lines.append(f"총합: {total}회")
+
         text = "\n".join(summary_lines)
         QApplication.clipboard().setText(text)
 
@@ -859,7 +1078,7 @@ class CounterApp(QMainWindow):
         msg.setIcon(QMessageBox.Information)
         msg.setWindowTitle("복사 완료")
         msg.setText("카운터 결과가 클립보드에 복사되었습니다.")
-        msg.setStyleSheet("")  # 시스템 기본 스타일 사용
+        msg.setStyleSheet(MESSAGEBOX_DARK_STYLE)
         msg.exec()
 
     def apply_global_styles(self):
@@ -906,23 +1125,22 @@ class CounterApp(QMainWindow):
             if self.last_clicked_button and self.last_clicked_button != button:
                 self.last_clicked_button.update_display()
 
-            # 사용자가 있는 키 - 모드 토글 버튼에 따라 증가/감소
-            is_increment = self.numpad.mode_toggle_btn.is_increment_mode
-            if is_increment:
-                if button.increment():
-                    self.add_log(f"[+] {button.key_label}: {button.user_name} (총 {button.count}회)")
-                    # 증가 시 초록색 하이라이트
-                    self.highlight_button(button, "#2ecc71")
-            else:
-                if button.decrement():
-                    self.add_log(f"[-] {button.key_label}: {button.user_name} (총 {button.count}회)")
-                    # 감소 시 빨간색 하이라이트
-                    self.highlight_button(button, "#e74c3c")
+            # 사용자가 있는 키 - 항상 증가
+            if button.increment():
+                self.add_log(f"[+] {button.key_label}: {button.user_name} (총 {button.count}회)")
+                # 클릭 순서 기록 추가
+                self.click_history.append((button.user_name, button.count))
+                # 증가 시 초록색 하이라이트
+                self.highlight_button(button, "#2ecc71")
 
             self.last_clicked_button = button
             self.save_data()
             self.save_daily_history()  # 매번 자동 저장
             self.update_summary()
+
+            # 히스토리 패널이 열려있으면 업데이트
+            if self.history_panel_visible:
+                self.update_history_table()
 
     def highlight_button(self, button, color):
         """마지막 클릭한 버튼을 하이라이트"""
@@ -954,7 +1172,7 @@ class CounterApp(QMainWindow):
                     msg.setIcon(QMessageBox.Warning)
                     msg.setWindowTitle("중복 오류")
                     msg.setText(f"'{name}'은(는) 이미 다른 키에 등록되어 있습니다.")
-                    msg.setStyleSheet("")
+                    msg.setStyleSheet(MESSAGEBOX_DARK_STYLE)
                     msg.exec()
                     return
 
@@ -998,7 +1216,7 @@ class CounterApp(QMainWindow):
                     msg.setIcon(QMessageBox.Warning)
                     msg.setWindowTitle("중복 오류")
                     msg.setText(f"'{new_name}'은(는) 이미 다른 키에 등록되어 있습니다.")
-                    msg.setStyleSheet("")
+                    msg.setStyleSheet(MESSAGEBOX_DARK_STYLE)
                     msg.exec()
                     return
 
@@ -1019,7 +1237,7 @@ class CounterApp(QMainWindow):
         msg.setText(f"'{button.user_name}'을(를) 삭제하시겠습니까?")
         msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         msg.setDefaultButton(QMessageBox.No)
-        msg.setStyleSheet("")
+        msg.setStyleSheet(MESSAGEBOX_DARK_STYLE)
         reply = msg.exec()
 
         if reply == QMessageBox.Yes:
@@ -1047,6 +1265,10 @@ class CounterApp(QMainWindow):
         self.add_log(f"[프리셋] 프리셋 {index + 1}로 전환")
         self.update_summary()
 
+        # 히스토리 패널이 열려있으면 업데이트
+        if self.history_panel_visible:
+            self.update_history_table()
+
     def save_current_preset(self):
         preset_data = {}
         for key, btn in self.numpad.buttons.items():
@@ -1056,6 +1278,7 @@ class CounterApp(QMainWindow):
                     "count": btn.count
                 }
         self.presets[self.current_preset]["users"] = preset_data
+        self.presets[self.current_preset]["click_history"] = self.click_history
 
     def load_current_preset(self):
         """현재 프리셋 데이터를 버튼에 로드"""
@@ -1074,6 +1297,9 @@ class CounterApp(QMainWindow):
                 btn.count = data.get("count", 0)
                 btn.update_display()
 
+        # 클릭 히스토리 복원
+        self.click_history = self.presets[self.current_preset].get("click_history", [])
+
         # 로드 후 요약 업데이트
         self.update_summary()
 
@@ -1088,25 +1314,41 @@ class CounterApp(QMainWindow):
         self.logs.append(log_entry)
 
     def update_summary(self):
-        """요약 업데이트 (실시간 로그 영역에 카운트 높은 순으로 표시)"""
-        # 카운트가 있는 사용자만 수집
-        user_counts = []
+        """요약 업데이트 (실시간 로그 영역에 클릭 순서대로 표시)"""
+        # 총 카운트 계산
         total_count = 0
         for key in self.numpad.buttons.keys():
             btn = self.numpad.buttons[key]
             if btn.user_name and btn.count > 0:
-                user_counts.append((btn.user_name, btn.count))
                 total_count += btn.count
 
         # 총 카운트 라벨 업데이트
         self.total_count_label.setText(f"총: {total_count}")
 
-        # 카운트 높은 순으로 정렬
+        # 각 버튼의 마지막 순번 업데이트
+        last_order = {}  # {name: order_number}
+        for i, (name, count) in enumerate(self.click_history):
+            last_order[name] = i + 1
+
+        for key in self.numpad.buttons.keys():
+            btn = self.numpad.buttons[key]
+            if btn.user_name and btn.user_name in last_order:
+                btn.set_order(last_order[btn.user_name])
+            else:
+                btn.set_order(0)
+
+        # 사용자별 카운트를 모아서 개수가 많은 순서로 정렬
+        user_counts = []
+        for key in sorted(self.numpad.buttons.keys()):
+            btn = self.numpad.buttons[key]
+            if btn.user_name and btn.count > 0:
+                user_counts.append((btn.user_name, btn.count))
+
+        # 카운트가 많은 순서로 정렬 (내림차순)
         user_counts.sort(key=lambda x: x[1], reverse=True)
 
         if user_counts:
-            # 최대 14줄 표시
-            display_lines = [f"{name}: {count}" for name, count in user_counts[:14]]
+            display_lines = [f"{name}: {count}회" for name, count in user_counts]
             display_text = "\n".join(display_lines)
         else:
             display_text = "실\n시\n간\n로\n그\n"
@@ -1124,7 +1366,7 @@ class CounterApp(QMainWindow):
         msg.setText("오늘의 모든 카운터를 초기화하시겠습니까?")
         msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         msg.setDefaultButton(QMessageBox.No)
-        msg.setStyleSheet("")  # 시스템 기본 스타일 사용
+        msg.setStyleSheet(MESSAGEBOX_DARK_STYLE)
         reply = msg.exec()
 
         if reply == QMessageBox.Yes:
@@ -1136,9 +1378,16 @@ class CounterApp(QMainWindow):
             for key in self.presets[self.current_preset]["users"]:
                 self.presets[self.current_preset]["users"][key]["count"] = 0
 
+            # 클릭 히스토리 초기화
+            self.click_history.clear()
+
             self.add_log("[초기화] 모든 카운터 초기화됨")
             self.save_data()
             self.update_summary()
+
+            # 히스토리 패널이 열려있으면 업데이트
+            if self.history_panel_visible:
+                self.update_history_table()
 
     def check_daily_reset(self):
         today = datetime.now().strftime("%Y-%m-%d")
@@ -1147,6 +1396,7 @@ class CounterApp(QMainWindow):
             for btn in self.numpad.buttons.values():
                 btn.reset_count()
             self.logs.clear()
+            self.click_history.clear()  # 클릭 히스토리도 초기화
             self.last_date = today
             self.add_log("[자동] 날짜가 변경되어 카운터가 초기화되었습니다")
             self.save_data()
@@ -1167,10 +1417,16 @@ class CounterApp(QMainWindow):
             summary_lines.append(f"=== {datetime.now().strftime('%Y-%m-%d')} 카운터 결과 ===")
             summary_lines.append("")
 
+            total = 0
             for key in sorted(self.numpad.buttons.keys()):
                 btn = self.numpad.buttons[key]
                 if btn.user_name:
                     summary_lines.append(f"{btn.user_name}: {btn.count}회")
+                    total += btn.count
+
+            # 총합 추가
+            summary_lines.append("")
+            summary_lines.append(f"총합: {total}회")
 
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write("\n".join(summary_lines))
@@ -1179,7 +1435,7 @@ class CounterApp(QMainWindow):
             msg.setIcon(QMessageBox.Information)
             msg.setWindowTitle("저장 완료")
             msg.setText(f"파일이 저장되었습니다:\n{filename}")
-            msg.setStyleSheet("")  # 시스템 기본 스타일 사용
+            msg.setStyleSheet(MESSAGEBOX_DARK_STYLE)
             msg.exec()
 
     # ========================================================================
@@ -1187,39 +1443,58 @@ class CounterApp(QMainWindow):
     # ========================================================================
 
     def save_data(self):
-        """현재 프리셋 데이터를 presets.json에 저장"""
+        """모든 데이터를 presets.json 하나에 저장"""
         self.save_current_preset()
 
-        with open(self.presets_file, 'w', encoding='utf-8') as f:
-            json.dump(self.presets, f, ensure_ascii=False, indent=2)
-
-        counter_data = {
-            "date": self.last_date,
+        data = {
+            "presets": self.presets,
             "current_preset": self.current_preset,
+            "last_date": self.last_date,
             "logs": self.logs[-100:]  # Keep last 100 logs
         }
-        with open(self.counter_data_file, 'w', encoding='utf-8') as f:
-            json.dump(counter_data, f, ensure_ascii=False, indent=2)
+
+        with open(self.presets_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
 
     def load_data(self):
-        """presets.json에서 프리셋 데이터 로드"""
-        # presets.json 로드
+        """presets.json에서 모든 데이터 로드"""
         if os.path.exists(self.presets_file):
             try:
                 with open(self.presets_file, 'r', encoding='utf-8') as f:
-                    loaded_presets = json.load(f)
-                    # 배열 형태로 로드
-                    if isinstance(loaded_presets, list) and len(loaded_presets) == 3:
-                        for i, preset in enumerate(loaded_presets):
-                            # 새 구조 (users 필드가 이미 있는 경우)
+                    data = json.load(f)
+
+                    # 새로운 통합 형식 (presets 키가 있는 경우)
+                    if isinstance(data, dict) and "presets" in data:
+                        loaded_presets = data["presets"]
+                        if isinstance(loaded_presets, list) and len(loaded_presets) == 3:
+                            for i, preset in enumerate(loaded_presets):
+                                if "users" in preset:
+                                    self.presets[i]["users"] = preset["users"]
+                                if "name" in preset:
+                                    self.presets[i]["name"] = preset["name"]
+                                if "click_history" in preset:
+                                    self.presets[i]["click_history"] = preset["click_history"]
+
+                        # current_preset, logs, last_date 로드
+                        self.current_preset = data.get("current_preset", 0)
+                        saved_date = data.get("last_date", "")
+
+                        if saved_date == self.last_date:
+                            self.logs = data.get("logs", [])
+                        else:
+                            self.last_date = datetime.now().strftime("%Y-%m-%d")
+
+                    # 기존 배열 형식 (하위 호환성)
+                    elif isinstance(data, list) and len(data) == 3:
+                        for i, preset in enumerate(data):
                             if "users" in preset:
                                 self.presets[i]["users"] = preset["users"]
                                 if "name" in preset:
                                     self.presets[i]["name"] = preset["name"]
-                            # 기존 구조를 새 구조로 변환 (user_seats, counters)
+                                if "click_history" in preset:
+                                    self.presets[i]["click_history"] = preset["click_history"]
                             elif "user_seats" in preset and "counters" in preset:
                                 users_dict = {}
-                                # user_seats: {"name": "key"} -> users: {"key": {"name": "name", "count": count}}
                                 for user_name, key in preset["user_seats"].items():
                                     count = preset["counters"].get(user_name, 0)
                                     users_dict[key] = {
@@ -1227,27 +1502,24 @@ class CounterApp(QMainWindow):
                                         "count": count
                                     }
                                 self.presets[i]["users"] = users_dict
+
+                        # 구 counter_data.json이 있으면 로드
+                        if os.path.exists(self.counter_data_file):
+                            try:
+                                with open(self.counter_data_file, 'r', encoding='utf-8') as cf:
+                                    counter_data = json.load(cf)
+                                    self.current_preset = counter_data.get("current_preset", 0)
+                                    saved_date = counter_data.get("date", "")
+                                    if saved_date == self.last_date:
+                                        self.logs = counter_data.get("logs", [])
+                            except:
+                                pass
             except:
                 pass
 
-        # counter_data.json 로드 (current_preset, logs)
-        if os.path.exists(self.counter_data_file):
-            try:
-                with open(self.counter_data_file, 'r', encoding='utf-8') as f:
-                    counter_data = json.load(f)
-                    saved_date = counter_data.get("date", "")
-                    self.current_preset = counter_data.get("current_preset", 0)
-
-                    # 프리셋 버튼 체크 상태 업데이트
-                    for i, btn in enumerate(self.preset_buttons):
-                        btn.setChecked(i == self.current_preset)
-
-                    if saved_date == self.last_date:
-                        self.logs = counter_data.get("logs", [])
-                    else:
-                        self.last_date = datetime.now().strftime("%Y-%m-%d")
-            except:
-                pass
+        # 프리셋 버튼 체크 상태 업데이트
+        for i, btn in enumerate(self.preset_buttons):
+            btn.setChecked(i == self.current_preset)
 
         self.load_current_preset()
 
@@ -1324,7 +1596,7 @@ def main():
             msg.setIcon(QMessageBox.Warning)
             msg.setWindowTitle("이미 실행 중")
             msg.setText("Numpad Counter가 이미 실행 중입니다.")
-            msg.setStyleSheet("")  # 시스템 기본 스타일 사용
+            msg.setStyleSheet(MESSAGEBOX_DARK_STYLE)
             msg.exec()
         return
 
@@ -1334,7 +1606,7 @@ def main():
         msg.setIcon(QMessageBox.Warning)
         msg.setWindowTitle("오류")
         msg.setText("프로그램을 시작할 수 없습니다.")
-        msg.setStyleSheet("")  # 시스템 기본 스타일 사용
+        msg.setStyleSheet(MESSAGEBOX_DARK_STYLE)
         msg.exec()
         return
 
